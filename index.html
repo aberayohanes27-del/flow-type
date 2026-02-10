@@ -1,0 +1,298 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>FlowType | Zen Typing Speed Test</title>
+    <style>
+        /* --- 1. AESTHETICS & DESIGN --- */
+        :root {
+            --bg-color: #0f0f12;
+            --glass-bg: rgba(255, 255, 255, 0.05);
+            --text-color: #646669;
+            --highlight-color: #e2b714; /* Cyber Gold */
+            --correct-color: #d1d0c5;
+            --error-color: #ca4754;
+            --font-main: 'Roboto Mono', monospace;
+        }
+
+        body {
+            background-color: var(--bg-color);
+            color: var(--text-color);
+            font-family: var(--font-main);
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            height: 100vh;
+            margin: 0;
+            overflow: hidden;
+            user-select: none;
+        }
+
+        .container {
+            width: 800px;
+            max-width: 90%;
+            display: flex;
+            flex-direction: column;
+            gap: 20px;
+        }
+
+        /* Header & Stats */
+        .header {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            color: var(--highlight-color);
+            font-size: 1.5rem;
+            margin-bottom: 10px;
+        }
+
+        .stats-box {
+            display: flex;
+            gap: 20px;
+            font-size: 1.2rem;
+            color: var(--highlight-color);
+        }
+
+        /* The Typing Area (Glassmorphism) */
+        .typing-area {
+            background: var(--glass-bg);
+            backdrop-filter: blur(10px);
+            padding: 30px;
+            border-radius: 15px;
+            border: 1px solid rgba(255, 255, 255, 0.1);
+            box-shadow: 0 8px 32px 0 rgba(0, 0, 0, 0.37);
+            position: relative;
+            min-height: 150px;
+            cursor: text;
+        }
+
+        /* Text Styling */
+        .quote-display {
+            font-size: 1.5rem;
+            line-height: 1.6;
+            letter-spacing: 1px;
+            word-break: break-word;
+        }
+
+        .char { position: relative; }
+        .correct { color: var(--correct-color); }
+        .incorrect { color: var(--error-color); text-decoration: underline; }
+        .current { border-left: 2px solid var(--highlight-color); animation: blink 1s infinite; }
+
+        @keyframes blink { 50% { border-color: transparent; } }
+
+        /* Hidden Input to capture typing */
+        #input-field {
+            opacity: 0;
+            position: absolute;
+            z-index: -999;
+        }
+
+        /* Restart & Share Buttons */
+        .controls {
+            display: flex;
+            justify-content: center;
+            gap: 15px;
+            margin-top: 20px;
+            opacity: 0; /* Hidden until game over */
+            transition: opacity 0.3s ease;
+            pointer-events: none;
+        }
+        
+        .controls.visible {
+            opacity: 1;
+            pointer-events: auto;
+        }
+
+        button {
+            background: transparent;
+            border: 2px solid var(--highlight-color);
+            color: var(--highlight-color);
+            padding: 10px 20px;
+            border-radius: 8px;
+            font-family: var(--font-main);
+            font-weight: bold;
+            cursor: pointer;
+            transition: all 0.2s;
+        }
+
+        button:hover {
+            background: var(--highlight-color);
+            color: var(--bg-color);
+        }
+        
+        .blur-text { filter: blur(4px); transition: filter 0.3s; }
+        .focus-msg {
+            position: absolute;
+            top: 50%; left: 50%;
+            transform: translate(-50%, -50%);
+            color: var(--highlight-color);
+            display: none;
+        }
+
+    </style>
+    <link href="https://fonts.googleapis.com/css2?family=Roboto+Mono:wght@400;700&display=swap" rel="stylesheet">
+</head>
+<body>
+
+    <div class="container">
+        <div class="header">
+            <div class="logo">FlowType</div>
+            <div class="stats-box">
+                <span id="timer">60s</span>
+                <span id="wpm">0 WPM</span>
+            </div>
+        </div>
+
+        <div class="typing-area" onclick="focusInput()">
+            <div id="quote" class="quote-display">Loading...</div>
+            <div class="focus-msg" id="focus-msg">Click to Focus</div>
+        </div>
+
+        <input type="text" id="input-field" autocomplete="off">
+
+        <div class="controls" id="controls">
+            <button onclick="initGame()">Restart Test</button>
+            <button onclick="shareResult()">Copy Score</button>
+        </div>
+    </div>
+
+    <script>
+        /* --- 2. THE LOGIC (BRAIN) --- */
+        const quotes = [
+            "The only way to do great work is to love what you do. If you haven't found it yet, keep looking.",
+            "Success is not final, failure is not fatal: it is the courage to continue that counts.",
+            "Believe you can and you're halfway there. The future belongs to those who believe in the beauty of their dreams.",
+            "Do not wait for the perfect moment, take the moment and make it perfect.",
+            "Simplicity is the ultimate sophistication. It is better to be a warrior in a garden than a gardener in a war.",
+            "Your time is limited, so don't waste it living someone else's life."
+        ];
+
+        const quoteElement = document.getElementById("quote");
+        const inputField = document.getElementById("input-field");
+        const timerElement = document.getElementById("timer");
+        const wpmElement = document.getElementById("wpm");
+        const controls = document.getElementById("controls");
+        const focusMsg = document.getElementById("focus-msg");
+
+        let timeLeft = 60;
+        let timeElapsed = 0;
+        let timer = null;
+        let charIndex = 0;
+        let isTyping = false;
+        let mistakes = 0;
+
+        function loadQuote() {
+            const quoteIndex = Math.floor(Math.random() * quotes.length);
+            quoteElement.innerHTML = "";
+            quotes[quoteIndex].split("").forEach(char => {
+                let span = `<span>${char}</span>`;
+                quoteElement.innerHTML += span;
+            });
+            quoteElement.querySelectorAll("span")[0].classList.add("current");
+        }
+
+        function initGame() {
+            loadQuote();
+            timeLeft = 60;
+            timeElapsed = 0;
+            charIndex = 0;
+            mistakes = 0;
+            isTyping = false;
+            inputField.value = "";
+            timerElement.innerText = "60s";
+            wpmElement.innerText = "0 WPM";
+            controls.classList.remove("visible");
+            quoteElement.classList.remove("blur-text");
+            clearInterval(timer);
+        }
+
+        function startTimer() {
+            timer = setInterval(() => {
+                if (timeLeft > 0) {
+                    timeLeft--;
+                    timeElapsed++;
+                    timerElement.innerText = timeLeft + "s";
+                    
+                    // Calculate WPM in real-time
+                    let wpm = Math.round(((charIndex - mistakes) / 5) / (timeElapsed / 60));
+                    wpm = wpm < 0 || !wpm || wpm === Infinity ? 0 : wpm;
+                    wpmElement.innerText = wpm + " WPM";
+                } else {
+                    finishGame();
+                }
+            }, 1000);
+        }
+
+        function finishGame() {
+            clearInterval(timer);
+            inputField.blur();
+            controls.classList.add("visible");
+        }
+
+        function initTyping() {
+            const chars = quoteElement.querySelectorAll("span");
+            let typedChar = inputField.value.split("")[charIndex];
+
+            if (charIndex < chars.length && timeLeft > 0) {
+                if (!isTyping) {
+                    startTimer();
+                    isTyping = true;
+                }
+
+                if (typedChar == null) { // Backspace
+                    charIndex--;
+                    if (chars[charIndex].classList.contains("incorrect")) {
+                        mistakes--;
+                    }
+                    chars[charIndex].classList.remove("correct", "incorrect");
+                } else {
+                    if (chars[charIndex].innerText === typedChar) {
+                        chars[charIndex].classList.add("correct");
+                    } else {
+                        mistakes++;
+                        chars[charIndex].classList.add("incorrect");
+                    }
+                    charIndex++;
+                }
+
+                // Move cursor
+                chars.forEach(span => span.classList.remove("current"));
+                if (charIndex < chars.length) {
+                    chars[charIndex].classList.add("current");
+                } else {
+                    // Quote finished, load new one or end? Let's end for simplicity
+                    finishGame();
+                }
+            }
+        }
+
+        function shareResult() {
+            const score = wpmElement.innerText;
+            const text = `I just hit ${score} on FlowType! ⚡ Can you beat me? #FlowType #Coding`;
+            navigator.clipboard.writeText(text);
+            alert("Score copied to clipboard! Paste it on Twitter/TikTok.");
+        }
+
+        // Focus handling
+        function focusInput() {
+            inputField.focus();
+            quoteElement.classList.remove("blur-text");
+            focusMsg.style.display = "none";
+        }
+
+        inputField.addEventListener("blur", () => {
+            if(timeLeft > 0) {
+                quoteElement.classList.add("blur-text");
+                focusMsg.style.display = "block";
+            }
+        });
+
+        // Event Listeners
+        inputField.addEventListener("input", initTyping);
+        document.addEventListener("keydown", () => inputField.focus());
+        window.onload = initGame;
+    </script>
+</body>
+</html>
